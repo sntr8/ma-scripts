@@ -62,6 +62,29 @@ local function copyMAtricks(srcName, dstName)
     dst:Set('NAME', dstName)
 end
 
+local groupsPool
+
+local function getGroupsPool()
+    if not groupsPool then
+        local pool = DataPool()
+        for i = 1, pool:Count() do
+            local child = pool:Ptr(i)
+            if child and child:GetClass() == 'Groups' then
+                groupsPool = child
+                break
+            end
+        end
+    end
+    return groupsPool
+end
+
+local function groupExists(name)
+    local pool = getGroupsPool()
+    if not pool then return false end
+    local grp = pool:Find(name)
+    return grp ~= nil and grp:IsValid()
+end
+
 local function showSetupDialog()
     local inputNames  = { 'Spot', 'Wash', 'Wash Back', 'Beam', 'Blinder', 'Strobe' }
     local rgbwNames   = { 'Spot RGBW', 'Wash RGBW', 'Wash Back RGBW', 'Face RGBW' }
@@ -278,12 +301,26 @@ local function main()
         end
     end
 
+    local typeId = { Spot = 1, Wash = 2, Beam = 3, Blinder = 4, Strobe = 5 }
+
     for group, value in pairs(setup.inputs) do
         local fixtureCount, trussCount = string.match(tostring(value), "^(%d+)/(%d+)$")
         fixtureCount = tonumber(fixtureCount)
         trussCount = tonumber(trussCount)
         if fixtureCount then
             Echo("### House " .. group .. " fixture count: " .. fixtureCount .. " truss count: " .. tostring(trussCount))
+            local id = typeId[group]
+            if id and trussCount then
+                Echo("### Updating group grid for House " .. group)
+                CmdIndirectWait(string.format(
+                    'Preview On /NoOops; ClearAll /NoOops; Grid 0/0 Thru %d/%d /NoOops; Fixture %d0001 Thru %d9999 /NoOops; Store Group %s /o /NoOops; ClearAll /NoOops; Preview Off /NoOops',
+                    fixtureCount - 1, trussCount - 1,
+                    id, id,
+                    q('House ' .. group)
+                ))
+            elseif trussCount then
+                showError('Update group grid for House ' .. group .. ' manually.')
+            end
             if group == "Strobe" then
                 setMAtricks('Potpuri Clap House', 'XGROUP', fixtureCount)
                 setMAtricks('Potpuri Clap House', 'SPEEDFROMX', 165 / fixtureCount)
@@ -300,6 +337,28 @@ local function main()
                     setMAtricks('House ' .. group .. ' - Grp3 Y-1 <>', 'XWINGS', 2)
                     setMAtricks('House ' .. group .. ' - Grp3 Y-1 <>', 'INVERTX', 'Yes')
                 end
+            end
+            local shuffleName = 'House ' .. group .. ' Shuffle'
+            if groupExists(shuffleName) then
+                Echo("### Updating shuffle group for House " .. group)
+                CmdIndirectWait('Preview On /NoOops; ClearAll /NoOops; Group ' ..
+                q('House ' .. group .. ' Linear') .. ' /NoOops; Shuffle /NoOops; Store Group ' .. q(shuffleName) .. ' /o /NoOops; ClearAll /NoOops; Preview Off /NoOops')
+            end
+            local invertName = 'House ' .. group .. ' Invert'
+            if groupExists(invertName) then
+                Echo("### Updating invert group for House " .. group)
+                CmdIndirectWait('Preview On /NoOops; ClearAll /NoOops; Group ' ..
+                q('House ' .. group) ..
+                '; Grid "Flip" "X"; Store Group ' ..
+                q(invertName) .. ' /o /NoOops; ClearAll /NoOops; Preview Off /NoOops')
+            end
+            local invertYName = 'House ' .. group .. ' Y Invert'
+            if groupExists(invertYName) then
+                Echo("### Updating Y invert group for House " .. group)
+                CmdIndirectWait('Preview On /NoOops; ClearAll /NoOops; Group ' ..
+                q('House ' .. group) ..
+                '; Grid "Flip" "Y"; Store Group ' ..
+                q(invertYName) .. ' /o /NoOops; ClearAll /NoOops; Preview Off /NoOops')
             end
         else
             Echo("### " .. group .. " count not given")
