@@ -5,6 +5,17 @@ local Macro_NoWash = 'No House Wash'
 local Macro_SingleWash = 'Single-Truss Wash'
 local Macro_MultiWash = 'Multi-Truss Wash'
 
+local pluginTable, pluginHandle = select(3, ...)
+
+local function showError(msg)
+    Echo("## ERROR: " .. msg)
+    MessageBox({
+        title = 'Setup error',
+        message = msg,
+        commands = { { value = 1, name = 'Ok' } }
+    })
+end
+
 local function getMAtricksPool()
     local pool = DataPool()
     for i = 1, pool:Count() do
@@ -13,12 +24,13 @@ local function getMAtricksPool()
             return child
         end
     end
+    showError("MAtricks pool not found in DataPool")
 end
 
 local function setMAtricks(name, property, value)
     local matricks = getMAtricksPool():Find(name)
     if not matricks or not matricks:IsValid() then
-        Echo("MAtricks not found: " .. name)
+        showError("MAtricks not found: " .. name)
         return
     end
     matricks:Set(property, tostring(value))
@@ -29,105 +41,217 @@ local function copyMAtricks(srcName, dstName)
     local src = pool:Find(srcName)
     local dst = pool:Find(dstName)
     if not src or not src:IsValid() then
-        Echo("MAtricks not found: " .. srcName)
+        showError("MAtricks not found: " .. srcName)
         return
     end
     if not dst or not dst:IsValid() then
-        Echo("MAtricks not found: " .. dstName)
+        showError("MAtricks not found: " .. dstName)
         return
     end
     dst:Copy(src)
+    dst:Set('NAME', dstName)
+end
+
+local function showSetupDialog()
+    local inputNames  = { 'Spot', 'Wash', 'Wash Back', 'Beam', 'Blinder', 'Strobe' }
+    local rgbwNames   = { 'Spot RGBW', 'Wash RGBW', 'Wash Back RGBW', 'Face RGBW' }
+    local washOptions = { 'No change', 'None', 'Single-truss', 'Multi-truss' }
+    local spotOptions = { 'No change', 'Colour Mix', 'Colour Wheel' }
+
+    local washSelected = 1
+    local spotSelected = 1
+    local dialogResult = nil
+
+    local overlay = GetFocusDisplay().ScreenOverlay
+    local W, H = 460, 570
+
+    local dialog = overlay:Append('BaseInput')
+    dialog.W, dialog.H = W, H
+    dialog:Set('FRAMEWIDTH', '2')
+
+    -- Title label (manual — avoids NormedTitleBar's built-in close behaviour)
+    local titleLabel = dialog:Append('UIObject')
+    titleLabel.Text = 'Show Setup'
+    titleLabel.X, titleLabel.Y = 0, 0
+    titleLabel.W, titleLabel.H = W, 30
+
+    -- Fixture count header
+    local fixtureHeader = dialog:Append('UIObject')
+    fixtureHeader.Text = 'Fixture counts  (format: fixtures/trusses  eg. 6/3)'
+    fixtureHeader.X, fixtureHeader.Y = 10, 35
+    fixtureHeader.W, fixtureHeader.H = 440, 20
+
+    -- Fixture inputs
+    local inputFields = {}
+    for i, name in ipairs(inputNames) do
+        local y = 60 + (i - 1) * 35
+        local lbl = dialog:Append('UIObject')
+        lbl.Text = name
+        lbl.X, lbl.Y = 10, y
+        lbl.W, lbl.H = 120, 25
+        local edit = dialog:Append('LineEdit')
+        edit.X, edit.Y = 135, y
+        edit.W, edit.H = 315, 25
+        inputFields[name] = edit
+    end
+
+    -- Selector buttons
+    local washLbl = dialog:Append('UIObject')
+    washLbl.Text = 'House Wash'
+    washLbl.X, washLbl.Y = 10, 280
+    washLbl.W, washLbl.H = 120, 25
+
+    local washBtn = dialog:Append('Button')
+    washBtn.Text = washOptions[washSelected]
+    washBtn.X, washBtn.Y = 135, 280
+    washBtn.W, washBtn.H = 315, 25
+    washBtn.clicked = 'setupWashClicked'
+    washBtn.plugincomponent = pluginHandle
+
+    local spotLbl = dialog:Append('UIObject')
+    spotLbl.Text = 'House Spot'
+    spotLbl.X, spotLbl.Y = 10, 315
+    spotLbl.W, spotLbl.H = 120, 25
+
+    local spotBtn = dialog:Append('Button')
+    spotBtn.Text = spotOptions[spotSelected]
+    spotBtn.X, spotBtn.Y = 135, 315
+    spotBtn.W, spotBtn.H = 315, 25
+    spotBtn.clicked = 'setupSpotClicked'
+    spotBtn.plugincomponent = pluginHandle
+
+    -- RGBW checkboxes (2 columns)
+    local rgbwHeader = dialog:Append('UIObject')
+    rgbwHeader.Text = 'RGBW'
+    rgbwHeader.X, rgbwHeader.Y = 10, 355
+    rgbwHeader.W, rgbwHeader.H = 440, 20
+
+    local checkboxes = {}
+    for i, name in ipairs(rgbwNames) do
+        local col = (i - 1) % 2
+        local row = math.floor((i - 1) / 2)
+        local cb = dialog:Append('CheckBox')
+        cb.Text = name
+        cb.X, cb.Y = 10 + col * 225, 378 + row * 35
+        cb.W, cb.H = 215, 25
+        checkboxes[name] = cb
+    end
+
+    -- Run / Cancel buttons
+    local cancelBtn = dialog:Append('Button')
+    cancelBtn.Text = 'Cancel'
+    cancelBtn.X, cancelBtn.Y = 10, 465
+    cancelBtn.W, cancelBtn.H = 100, 35
+    cancelBtn.clicked = 'setupCancelClicked'
+    cancelBtn.plugincomponent = pluginHandle
+
+    local runBtn = dialog:Append('Button')
+    runBtn.Text = 'Run'
+    runBtn.X, runBtn.Y = 350, 465
+    runBtn.W, runBtn.H = 100, 35
+    runBtn.clicked = 'setupRunClicked'
+    runBtn.plugincomponent = pluginHandle
+
+    dialog:WaitInit()
+    FindBestFocus(dialog)
+
+    -- Callbacks
+    function pluginTable.setupWashClicked(caller)
+        local idx = PopupInput({ title = 'House Wash configuration', caller = caller, items = washOptions })
+        if idx then
+            washSelected = idx
+            washBtn.Text = washOptions[washSelected]
+        end
+    end
+
+    function pluginTable.setupSpotClicked(caller)
+        local idx = PopupInput({ title = 'House Spot colours', caller = caller, items = spotOptions })
+        if idx then
+            spotSelected = idx
+            spotBtn.Text = spotOptions[spotSelected]
+        end
+    end
+
+    function pluginTable.setupRunClicked()
+        dialogResult = 'run'
+    end
+
+    function pluginTable.setupCancelClicked()
+        dialogResult = 'cancel'
+    end
+
+    -- Wait for Run or Cancel
+    dialog:HookDelete(function() dialogResult = 'cancel' end)
+
+    while dialogResult == nil do coroutine.yield(0.1) end
+
+    -- Read values before closing
+    local inputs = {}
+    for _, name in ipairs(inputNames) do
+        inputs[name] = inputFields[name].content
+    end
+
+    local states = {}
+    for _, name in ipairs(rgbwNames) do
+        states[name] = checkboxes[name].checked  -- verify: may be .Checked or .state
+    end
+
+    -- Always clean up the frame, even if something errors
+    pcall(function() dialog:Parent():Remove(dialog:Index()) end)
+    coroutine.yield()
+
+    if dialogResult == 'cancel' then
+        return nil
+    end
+
+    return {
+        inputs     = inputs,
+        states     = states,
+        washConfig = washSelected,
+        spotColours = spotSelected
+    }
 end
 
 local function main()
-    local result
-    local resultTable
-    local inputs = {
-        { name = 'Spot',      whiteFilter = '0123456789/', maxTextLength = 4, vkPlugin = 'NumericInput' },
-        { name = 'Wash',      whiteFilter = '0123456789/', maxTextLength = 4, vkPlugin = 'NumericInput' },
-        { name = 'Wash Back', whiteFilter = '0123456789/', maxTextLength = 4, vkPlugin = 'NumericInput' },
-        { name = 'Beam',      whiteFilter = '0123456789/', maxTextLength = 4, vkPlugin = 'NumericInput' },
-        { name = 'Blinder',   whiteFilter = '0123456789/', maxTextLength = 4, vkPlugin = 'NumericInput' },
-        { name = 'Strobe',    whiteFilter = '0123456789/', maxTextLength = 4, vkPlugin = 'NumericInput' }
-    }
-    local selectors = {
-        { name = 'House Wash configuration', selectedValue = 1, values = { ['None'] = 1, ['Single-truss'] = 2, ['Multi-truss'] = 3 }, type = 1 },
-        { name = 'House Spot colours',     selectedValue = 1, values = { ['Colour Mix'] = 1, ['Colour Wheel'] = 2 },  type = 1 }
-    }
-    local states = {
-        { name = "Spot RGBW",    state = false },
-        { name = "Wash RGBW",    state = false },
-        { name = "Wash Back RGBW", state = false },
-        { name = "Face RGBW",    state = false }
-    }
-    repeat
-        result = true
-        resultTable =
-            MessageBox(
-                {
-                    title = 'Show setup',
-                    message =
-                    'Define the show rig. Define the max number of fixtures per truss and the count of truss (eg. 6/3) and select correct parameters',
-                    message_align_h = Enums.AlignmentH.Left,
-                    message_align_v = Enums.AlignmentV.Top,
-                    commands = { { value = 1, name = 'Run' }, { value = 0, name = 'Cancel' } },
-                    selectors = selectors,
-                    inputs = inputs,
-                    states = states,
-                    backColor = 'Global.Default',
-                    icon = 'logo_small',
-                    titleTextColor = 'Global.Text',
-                    messageTextColor = 'Global.Text'
-                }
-            )
-    until (result and resultTable.result == 1) or resultTable.result == 0
-    if resultTable.result == 0
-    then
+    local setup = showSetupDialog()
+
+    if not setup then
         Echo("## Showfile setup cancelled")
         return
     end
 
     Echo("## Starting configuring the showfile")
 
-    if resultTable.selectors['House Spot colours'] == 1
-    then
+    if setup.spotColours == 2 then
         Echo("### Colour mix spots")
         CmdIndirectWait('Macro ' .. string.char(34) .. Macro_SpotMix .. string.char(34))
-        if resultTable.states["Spot RGBW"] == true
-        then
+        if setup.states["Spot RGBW"] == true then
             Echo("### House spots are RGBW")
             CmdIndirectWait('Group ' ..
             string.char(34) ..
             'House Spot Linear' .. string.char(34) .. '; Macro ' .. string.char(34) .. Macro_RGBW .. string.char(34))
             CmdIndirectWait('ClearAll')
         end
-    elseif resultTable.selectors['House Spot colours'] == 2
-    then
+    elseif setup.spotColours == 3 then
         Echo("### Colour wheel spots")
         CmdIndirectWait('Macro ' .. string.char(34) .. Macro_SpotWheel .. string.char(34))
     end
 
-    if resultTable.selectors['House Wash configuration'] == 1
-    then
+    if setup.washConfig == 2 then
         Echo("### No House Washes")
         CmdIndirectWait('Macro ' .. string.char(34) .. Macro_NoWash .. string.char(34))
-    elseif resultTable.selectors['House Wash configuration'] == 2
-    then
+    elseif setup.washConfig == 3 then
         Echo("### Single truss of House Washes")
         CmdIndirectWait('Macro ' .. string.char(34) .. Macro_SingleWash .. string.char(34))
-    elseif resultTable.selectors['House Wash configuration'] == 3
-    then
+    elseif setup.washConfig == 4 then
         Echo("### Multiple trusses of House Washes")
         CmdIndirectWait('Macro ' .. string.char(34) .. Macro_MultiWash .. string.char(34))
     end
 
-    for group, state in pairs(resultTable.states)
-    do
+    for group, state in pairs(setup.states) do
         local groupName = group:gsub(" RGBW", "")
-        if groupName ~= "Spot"
-        then
-            if state == true
-            then
+        if groupName ~= "Spot" then
+            if state == true then
                 Echo("### House " .. groupName .. " are RGBW")
                 CmdIndirectWait('Group ' ..
                 string.char(34) ..
@@ -141,36 +265,29 @@ local function main()
         end
     end
 
-    for group, value in pairs(resultTable.inputs)
-    do
-        if value ~= nil and string.find(tostring(value), "/")
-        then
+    for group, value in pairs(setup.inputs) do
+        if value ~= nil and string.find(tostring(value), "/") then
             local i = 1
             local fixtureCount
             local trussCount
-            for match in string.gmatch(value, "([^/]+)")
-            do
-                if (i == 1)
-                then
+            for match in string.gmatch(value, "([^/]+)") do
+                if i == 1 then
                     fixtureCount = tonumber(match)
-                elseif (i == 2)
-                then
+                elseif i == 2 then
                     trussCount = tonumber(match)
                 end
                 i = i + 1
             end
 
             Echo("### House " .. group .. " fixture count: " .. fixtureCount .. " truss count: " .. trussCount)
-            if group == "Strobe"
-            then
+            if group == "Strobe" then
                 setMAtricks('Potpuri Clap House', 'XGROUP', fixtureCount)
                 setMAtricks('Potpuri Clap House', 'SPEEDFROMX', 165 / fixtureCount)
                 setMAtricks('Kerran vielä Bridge Strobe', 'XGROUP', fixtureCount)
                 setMAtricks('Kerran vielä Bridge Strobe', 'SPEEDFROMX', 150 / fixtureCount)
             else
                 setMAtricks('Half Rig - House ' .. group, 'XBLOCK', math.ceil(fixtureCount / 2))
-                if trussCount
-                then
+                if trussCount then
                     local template = 'Template Y' .. trussCount .. ' grp3'
                     copyMAtricks(template, 'House ' .. group .. ' - Grp3 Y-1')
                     copyMAtricks(template, 'House ' .. group .. ' - Grp3 Y-1 ><')

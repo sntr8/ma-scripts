@@ -80,7 +80,11 @@ for i = 1, handle:PropertyCount() do
 end
 ```
 
-`Copy MAtricks` has no Object API equivalent yet — use `CmdIndirectWait` for those.
+`dst:Copy(src)` works but overwrites the destination name — restore it with `dst:Set('NAME', dstName)` after copying.
+
+### Object API: Custom UI
+
+Plugins can build custom windows on the ScreenOverlay using `BaseInput` as the container. Requires `local pluginTable, pluginHandle = select(3, ...)` at module level for button callbacks. Button signals use `btn.clicked = 'callbackName'` + `btn.plugincomponent = pluginHandle`, with the callback defined as `function pluginTable.callbackName(caller) end`. Read values via `lineEdit.content` and `checkBox.checked`. Use `dialog:HookDelete(function() result = 'cancel' end)` to handle external dismissal. Close with `dialog:Parent():Remove(dialog:Index())`.
 
 ### `setup-show.lua`
 
