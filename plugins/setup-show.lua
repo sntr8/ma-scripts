@@ -7,6 +7,8 @@ local Macro_MultiWash = 'Multi-Truss Wash'
 
 local pluginTable, pluginHandle = select(3, ...)
 
+local function q(s) return '"' .. s .. '"' end
+
 local function showError(msg)
     Echo("## ERROR: " .. msg)
     MessageBox({
@@ -16,15 +18,23 @@ local function showError(msg)
     })
 end
 
+local matricksPool
+
 local function getMAtricksPool()
-    local pool = DataPool()
-    for i = 1, pool:Count() do
-        local child = pool:Ptr(i)
-        if child:GetClass() == 'MAtricks' then
-            return child
+    if not matricksPool then
+        local pool = DataPool()
+        for i = 1, pool:Count() do
+            local child = pool:Ptr(i)
+            if child:GetClass() == 'MAtricks' then
+                matricksPool = child
+                break
+            end
+        end
+        if not matricksPool then
+            showError("MAtricks pool not found in DataPool")
         end
     end
-    showError("MAtricks pool not found in DataPool")
+    return matricksPool
 end
 
 local function setMAtricks(name, property, value)
@@ -224,62 +234,43 @@ local function main()
 
     if setup.spotColours == 2 then
         Echo("### Colour mix spots")
-        CmdIndirectWait('Macro ' .. string.char(34) .. Macro_SpotMix .. string.char(34))
-        if setup.states["Spot RGBW"] == true then
-            Echo("### House spots are RGBW")
-            CmdIndirectWait('Group ' ..
-            string.char(34) ..
-            'House Spot Linear' .. string.char(34) .. '; Macro ' .. string.char(34) .. Macro_RGBW .. string.char(34))
-            CmdIndirectWait('ClearAll')
-        end
+        CmdIndirectWait('Macro ' .. q(Macro_SpotMix))
     elseif setup.spotColours == 3 then
         Echo("### Colour wheel spots")
-        CmdIndirectWait('Macro ' .. string.char(34) .. Macro_SpotWheel .. string.char(34))
+        CmdIndirectWait('Macro ' .. q(Macro_SpotWheel))
     end
 
     if setup.washConfig == 2 then
         Echo("### No House Washes")
-        CmdIndirectWait('Macro ' .. string.char(34) .. Macro_NoWash .. string.char(34))
+        CmdIndirectWait('Macro ' .. q(Macro_NoWash))
     elseif setup.washConfig == 3 then
         Echo("### Single truss of House Washes")
-        CmdIndirectWait('Macro ' .. string.char(34) .. Macro_SingleWash .. string.char(34))
+        CmdIndirectWait('Macro ' .. q(Macro_SingleWash))
     elseif setup.washConfig == 4 then
         Echo("### Multiple trusses of House Washes")
-        CmdIndirectWait('Macro ' .. string.char(34) .. Macro_MultiWash .. string.char(34))
+        CmdIndirectWait('Macro ' .. q(Macro_MultiWash))
     end
 
     for group, state in pairs(setup.states) do
         local groupName = group:gsub(" RGBW", "")
-        if groupName ~= "Spot" then
-            if state == true then
-                Echo("### House " .. groupName .. " are RGBW")
-                CmdIndirectWait('Group ' ..
-                string.char(34) ..
-                'House ' ..
-                groupName .. ' Linear' .. string.char(34) .. '; Macro ' .. string.char(34) .. Macro_RGBW ..
-                string.char(34))
-                CmdIndirectWait('ClearAll')
-            else
-                Echo("### House " .. groupName .. " are not RGBW")
-            end
+        local isSpot = groupName == "Spot"
+        if isSpot and setup.spotColours ~= 2 then
+            -- skip: colour wheel spots don't support RGBW
+        elseif state == true then
+            Echo("### House " .. groupName .. " are RGBW")
+            CmdIndirectWait('Group ' .. q('House ' .. groupName .. ' Linear') .. '; Macro ' .. q(Macro_RGBW))
+            CmdIndirectWait('ClearAll')
+        else
+            Echo("### House " .. groupName .. " are not RGBW")
         end
     end
 
     for group, value in pairs(setup.inputs) do
-        if value ~= nil and string.find(tostring(value), "/") then
-            local i = 1
-            local fixtureCount
-            local trussCount
-            for match in string.gmatch(value, "([^/]+)") do
-                if i == 1 then
-                    fixtureCount = tonumber(match)
-                elseif i == 2 then
-                    trussCount = tonumber(match)
-                end
-                i = i + 1
-            end
-
-            Echo("### House " .. group .. " fixture count: " .. fixtureCount .. " truss count: " .. trussCount)
+        local fixtureCount, trussCount = string.match(tostring(value), "^(%d+)/(%d+)$")
+        fixtureCount = tonumber(fixtureCount)
+        trussCount = tonumber(trussCount)
+        if fixtureCount then
+            Echo("### House " .. group .. " fixture count: " .. fixtureCount .. " truss count: " .. tostring(trussCount))
             if group == "Strobe" then
                 setMAtricks('Potpuri Clap House', 'XGROUP', fixtureCount)
                 setMAtricks('Potpuri Clap House', 'SPEEDFROMX', 165 / fixtureCount)
@@ -300,6 +291,7 @@ local function main()
         else
             Echo("### " .. group .. " count not given")
         end
+
     end
 end
 
