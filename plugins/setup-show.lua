@@ -116,6 +116,8 @@ local function showSetupDialog()
 
     -- Fixture inputs
     local inputFields = {}
+    local updateGroupsStates = {}
+    local updateGroupsBoxes = {}
     for i, name in ipairs(inputNames) do
         local y = 60 + (i - 1) * 35
         local lbl = dialog:Append('UIObject')
@@ -124,8 +126,16 @@ local function showSetupDialog()
         lbl.W, lbl.H = 120, 25
         local edit = dialog:Append('LineEdit')
         edit.X, edit.Y = 135, y
-        edit.W, edit.H = 315, 25
+        edit.W, edit.H = 195, 25
         inputFields[name] = edit
+        local cb = dialog:Append('CheckBox')
+        cb.Text = 'Groups'
+        cb.X, cb.Y = 335, y
+        cb.W, cb.H = 115, 25
+        cb.clicked = 'setupUpdateGroupsChanged'
+        cb.plugincomponent = pluginHandle
+        updateGroupsBoxes[name] = cb
+        updateGroupsStates[name] = false
     end
 
     -- Selector buttons
@@ -193,6 +203,16 @@ local function showSetupDialog()
     FindBestFocus(dialog)
 
     -- Callbacks
+    function pluginTable.setupUpdateGroupsChanged(caller)
+        for name, cb in pairs(updateGroupsBoxes) do
+            if cb == caller then
+                updateGroupsStates[name] = not updateGroupsStates[name]
+                caller:Set('STATE', updateGroupsStates[name] and '1' or '0')
+                break
+            end
+        end
+    end
+
     function pluginTable.setupRgbwChanged(caller)
         for name, cb in pairs(checkboxes) do
             if cb == caller then
@@ -251,10 +271,11 @@ local function showSetupDialog()
     end
 
     return {
-        inputs     = inputs,
-        states     = states,
-        washConfig = washSelected,
-        spotColours = spotSelected
+        inputs        = inputs,
+        states        = states,
+        updateGroups  = updateGroupsStates,
+        washConfig    = washSelected,
+        spotColours   = spotSelected
     }
 end
 
@@ -310,7 +331,7 @@ local function main()
         if fixtureCount then
             Echo("### House " .. group .. " fixture count: " .. fixtureCount .. " truss count: " .. tostring(trussCount))
             local id = typeId[group]
-            if id and trussCount then
+            if setup.updateGroups[group] and id and trussCount then
                 Echo("### Updating group grid for House " .. group)
                 CmdIndirectWait(string.format(
                     'Preview On /NoOops; ClearAll /NoOops; Grid 0/0 Thru %d/%d /NoOops; Fixture %d0001 Thru %d9999 /NoOops; Store Group %s /o /NoOops; ClearAll /NoOops; Preview Off /NoOops',
@@ -318,7 +339,7 @@ local function main()
                     id, id,
                     q('House ' .. group)
                 ))
-            elseif trussCount then
+            elseif setup.updateGroups[group] and trussCount then
                 showError('Update group grid for House ' .. group .. ' manually.')
             end
             if group == "Strobe" then
@@ -338,27 +359,29 @@ local function main()
                     setMAtricks('House ' .. group .. ' - Grp3 Y-1 <>', 'INVERTX', 'Yes')
                 end
             end
-            local shuffleName = 'House ' .. group .. ' Shuffle'
-            if groupExists(shuffleName) then
-                Echo("### Updating shuffle group for House " .. group)
-                CmdIndirectWait('Preview On /NoOops; ClearAll /NoOops; Group ' ..
-                q('House ' .. group .. ' Linear') .. ' /NoOops; Shuffle /NoOops; Store Group ' .. q(shuffleName) .. ' /o /NoOops; ClearAll /NoOops; Preview Off /NoOops')
-            end
-            local invertName = 'House ' .. group .. ' Invert'
-            if groupExists(invertName) then
-                Echo("### Updating invert group for House " .. group)
-                CmdIndirectWait('Preview On /NoOops; ClearAll /NoOops; Group ' ..
-                q('House ' .. group) ..
-                '; Grid "Flip" "X"; Store Group ' ..
-                q(invertName) .. ' /o /NoOops; ClearAll /NoOops; Preview Off /NoOops')
-            end
-            local invertYName = 'House ' .. group .. ' Y Invert'
-            if groupExists(invertYName) then
-                Echo("### Updating Y invert group for House " .. group)
-                CmdIndirectWait('Preview On /NoOops; ClearAll /NoOops; Group ' ..
-                q('House ' .. group) ..
-                '; Grid "Flip" "Y"; Store Group ' ..
-                q(invertYName) .. ' /o /NoOops; ClearAll /NoOops; Preview Off /NoOops')
+            if setup.updateGroups[group] then
+                local shuffleName = 'House ' .. group .. ' Shuffle'
+                if groupExists(shuffleName) then
+                    Echo("### Updating shuffle group for House " .. group)
+                    CmdIndirectWait('Preview On /NoOops; ClearAll /NoOops; Group ' ..
+                    q('House ' .. group .. ' Linear') .. ' /NoOops; Shuffle /NoOops; Store Group ' .. q(shuffleName) .. ' /o /NoOops; ClearAll /NoOops; Preview Off /NoOops')
+                end
+                local invertName = 'House ' .. group .. ' Invert'
+                if groupExists(invertName) then
+                    Echo("### Updating invert group for House " .. group)
+                    CmdIndirectWait('Preview On /NoOops; ClearAll /NoOops; Group ' ..
+                    q('House ' .. group) ..
+                    '; Grid "Flip" "X"; Store Group ' ..
+                    q(invertName) .. ' /o /NoOops; ClearAll /NoOops; Preview Off /NoOops')
+                end
+                local invertYName = 'House ' .. group .. ' Y Invert'
+                if groupExists(invertYName) then
+                    Echo("### Updating Y invert group for House " .. group)
+                    CmdIndirectWait('Preview On /NoOops; ClearAll /NoOops; Group ' ..
+                    q('House ' .. group) ..
+                    '; Grid "Flip" "Y"; Store Group ' ..
+                    q(invertYName) .. ' /o /NoOops; ClearAll /NoOops; Preview Off /NoOops')
+                end
             end
         else
             Echo("### " .. group .. " count not given")
