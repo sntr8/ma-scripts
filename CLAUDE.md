@@ -72,7 +72,7 @@ matricks:Set('XBLOCK', '3')
 matricks:Get('XBLOCK', Enums.Roles.Display)
 ```
 
-Property names are uppercase versions of the CLI names (e.g. `XBlock` → `'XBLOCK'`, `SpeedFromX` → `'SPEEDFROMX'`). Use the snippet below to discover all properties on any object:
+Property names are uppercase versions of the CLI names (e.g. `XBlock` → `'XBLOCK'`, `SpeedFromX` → `'SPEEDFROMX'`). Boolean properties use `'Yes'`/`'No'` strings (e.g. `InvertX` → `'INVERTX'`, value `'Yes'` or `'No'`). Use the snippet below to discover all properties on any object:
 
 ```lua
 for i = 1, handle:PropertyCount() do

@@ -24,6 +24,21 @@ local function setMAtricks(name, property, value)
     matricks:Set(property, tostring(value))
 end
 
+local function copyMAtricks(srcName, dstName)
+    local pool = getMAtricksPool()
+    local src = pool:Find(srcName)
+    local dst = pool:Find(dstName)
+    if not src or not src:IsValid() then
+        Echo("MAtricks not found: " .. srcName)
+        return
+    end
+    if not dst or not dst:IsValid() then
+        Echo("MAtricks not found: " .. dstName)
+        return
+    end
+    dst:Copy(src)
+end
+
 local function main()
     local result
     local resultTable
@@ -148,64 +163,21 @@ local function main()
             Echo("### House " .. group .. " fixture count: " .. fixtureCount .. " truss count: " .. trussCount)
             if group == "Strobe"
             then
-                CmdIndirectWait('Set MAtricks ' ..
-                string.char(34) ..
-                'Potpuri Clap House' ..
-                string.char(34) ..
-                ' ' ..
-                string.char(34) ..
-                'XGroup' ..
-                string.char(34) ..
-                ' ' ..
-                fixtureCount ..
-                ' ' ..
-                string.char(34) .. 'SpeedFromX' ..
-                string.char(34) .. ' ' .. string.char(34) .. 165 / fixtureCount .. string.char(34))
-                CmdIndirectWait('Set MAtricks ' ..
-                string.char(34) ..
-                'Kerran vielä Bridge Strobe' ..
-                string.char(34) ..
-                ' ' ..
-                string.char(34) ..
-                'XGroup' ..
-                string.char(34) ..
-                ' ' ..
-                fixtureCount ..
-                ' ' ..
-                string.char(34) .. 'SpeedFromX' ..
-                string.char(34) .. ' ' .. string.char(34) .. 150 / fixtureCount .. string.char(34))
+                setMAtricks('Potpuri Clap House', 'XGROUP', fixtureCount)
+                setMAtricks('Potpuri Clap House', 'SPEEDFROMX', 165 / fixtureCount)
+                setMAtricks('Kerran vielä Bridge Strobe', 'XGROUP', fixtureCount)
+                setMAtricks('Kerran vielä Bridge Strobe', 'SPEEDFROMX', 150 / fixtureCount)
             else
-                CmdIndirectWait('Set MAtricks ' ..
-                string.char(34) ..
-                'Half Rig - House ' ..
-                group .. string.char(34) ..
-                ' ' .. string.char(34) .. 'XBlock' .. string.char(34) .. ' ' .. math.ceil(fixtureCount / 2))
+                setMAtricks('Half Rig - House ' .. group, 'XBLOCK', math.ceil(fixtureCount / 2))
                 if trussCount
                 then
-                    CmdIndirectWait('Copy MAtricks ' ..
-                    string.char(34) ..
-                    'Template Y' ..
-                    trussCount ..
-                    ' grp3' ..
-                    string.char(34) ..
-                    ' At MAtricks ' .. string.char(34) .. 'House ' .. group .. ' - Grp3 Y-1' ..
-                    string.char(34) .. ' /Merge ')
-                    CmdIndirectWait('Copy MAtricks ' ..
-                    string.char(34) ..
-                    'Template Y' ..
-                    trussCount ..
-                    ' grp3' ..
-                    string.char(34) ..
-                    ' At MAtricks ' .. string.char(34) .. 'House ' ..
-                    group .. ' - Grp3 Y-1 ><' .. string.char(34) .. ' /Merge ')
-                    CmdIndirectWait('Copy MAtricks ' ..
-                    string.char(34) ..
-                    'Template Y' ..
-                    trussCount ..
-                    ' grp3' ..
-                    string.char(34) ..
-                    ' At MAtricks ' .. string.char(34) .. 'House ' ..
-                    group .. ' - Grp3 Y-1 <>' .. string.char(34) .. ' /Merge ')
+                    local template = 'Template Y' .. trussCount .. ' grp3'
+                    copyMAtricks(template, 'House ' .. group .. ' - Grp3 Y-1')
+                    copyMAtricks(template, 'House ' .. group .. ' - Grp3 Y-1 ><')
+                    setMAtricks('House ' .. group .. ' - Grp3 Y-1 ><', 'XWINGS', 2)
+                    copyMAtricks(template, 'House ' .. group .. ' - Grp3 Y-1 <>')
+                    setMAtricks('House ' .. group .. ' - Grp3 Y-1 <>', 'XWINGS', 2)
+                    setMAtricks('House ' .. group .. ' - Grp3 Y-1 <>', 'INVERTX', 'Yes')
                 end
             end
         else
