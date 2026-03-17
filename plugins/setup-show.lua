@@ -25,7 +25,7 @@ local function getMAtricksPool()
         local pool = DataPool()
         for i = 1, pool:Count() do
             local child = pool:Ptr(i)
-            if child:GetClass() == 'MAtricks' then
+            if child and child:GetClass() == 'MAtricks' then
                 matricksPool = child
                 break
             end
@@ -130,13 +130,14 @@ local function showSetupDialog()
     spotBtn.clicked = 'setupSpotClicked'
     spotBtn.plugincomponent = pluginHandle
 
-    -- RGBW checkboxes (2 columns)
+    -- RGBW toggles (2 columns)
     local rgbwHeader = dialog:Append('UIObject')
     rgbwHeader.Text = 'RGBW'
     rgbwHeader.X, rgbwHeader.Y = 10, 355
     rgbwHeader.W, rgbwHeader.H = 440, 20
 
     local checkboxes = {}
+    local rgbwStates = {}
     for i, name in ipairs(rgbwNames) do
         local col = (i - 1) % 2
         local row = math.floor((i - 1) / 2)
@@ -144,7 +145,10 @@ local function showSetupDialog()
         cb.Text = name
         cb.X, cb.Y = 10 + col * 225, 378 + row * 35
         cb.W, cb.H = 215, 25
+        cb.clicked = 'setupRgbwChanged'
+        cb.plugincomponent = pluginHandle
         checkboxes[name] = cb
+        rgbwStates[name] = false
     end
 
     -- Run / Cancel buttons
@@ -166,6 +170,16 @@ local function showSetupDialog()
     FindBestFocus(dialog)
 
     -- Callbacks
+    function pluginTable.setupRgbwChanged(caller)
+        for name, cb in pairs(checkboxes) do
+            if cb == caller then
+                rgbwStates[name] = not rgbwStates[name]
+                caller:Set('STATE', rgbwStates[name] and '1' or '0')
+                break
+            end
+        end
+    end
+
     function pluginTable.setupWashClicked(caller)
         local idx = PopupInput({ title = 'House Wash configuration', caller = caller, items = washOptions })
         if idx then
@@ -201,16 +215,15 @@ local function showSetupDialog()
         inputs[name] = inputFields[name].content
     end
 
-    local states = {}
-    for _, name in ipairs(rgbwNames) do
-        states[name] = checkboxes[name].checked  -- verify: may be .Checked or .state
-    end
+    local states = rgbwStates
+
+    local wasRun = dialogResult == 'run'
 
     -- Always clean up the frame, even if something errors
     pcall(function() dialog:Parent():Remove(dialog:Index()) end)
     coroutine.yield()
 
-    if dialogResult == 'cancel' then
+    if not wasRun then
         return nil
     end
 
@@ -254,7 +267,7 @@ local function main()
     for group, state in pairs(setup.states) do
         local groupName = group:gsub(" RGBW", "")
         local isSpot = groupName == "Spot"
-        if isSpot and setup.spotColours ~= 2 then
+        if isSpot and setup.spotColours == 3 then
             -- skip: colour wheel spots don't support RGBW
         elseif state == true then
             Echo("### House " .. groupName .. " are RGBW")
