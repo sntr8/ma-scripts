@@ -4,107 +4,51 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-This repository contains Lua plugins for **grandMA3** lighting console software. Plugins are loaded and executed directly within the MA3 console or MA3 onPC (PC-based version).
+Lua plugins for **grandMA3** lighting console. No build system — files are placed directly in the console's plugin directory and executed from within MA3.
 
-## Development
-
-There is no build system. Lua files are written and placed directly into the console's plugin directory. The grandMA3 console executes them using its built-in Lua runtime.
-
-To test changes, copy the plugin file to the grandMA3 plugins directory and execute it from within the MA3 software.
-
-## Architecture
-
-### Plugin structure
-
-Each plugin is a Lua file that returns a `main` function. The MA3 console calls this function when the plugin is executed:
+## Plugin structure
 
 ```lua
-local function main()
-    -- plugin logic
-end
+local pluginTable, pluginHandle = select(3, ...)  -- must be module-level for UI callbacks
+local function main() ... end
 return main
 ```
 
-### MA3 API
+## MA3 API
 
-The API is split into two categories (also reflected in `grandMA3_lua_functions.txt`):
+Two categories: Object-Free globals (`CmdIndirectWait`, `Echo`, `DataPool()`, `PopupInput`) and Object API via colon notation (`handle:Find()`, `handle:Set()`, `handle:Get()`). See `grandMA3_lua_functions.txt` for full reference.
 
-**Object-Free API** — called as plain globals:
-- `MessageBox(config)` — displays a dialog with inputs, selectors, and state toggles; returns a result table
-- `CmdIndirectWait(cmd)` — executes an MA3 console command string and waits for completion
-- `Echo(msg)` — logs a message to the MA3 command line output
-- `Enums` — MA3 enum constants (e.g. `Enums.AlignmentH.Left`)
-- `DataPool()` — returns a handle to the show data pool
+Property names are uppercase (`XBlock` → `'XBLOCK'`). Booleans use `'Yes'`/`'No'`. Always pass `Enums.Roles.Display` as the second arg to `:Get()`.
 
-**Object API** — called with colon notation on a handle (e.g. `handle:Find(name)`):
-- `handle:Find(name[, class])` — finds a direct child by name
-- `handle:FindRecursive(name[, class])` — finds a child recursively
-- `handle:Count()` — number of children
-- `handle:Ptr(index)` — child handle by 1-based index
-- `handle:Get(property[, role])` — get a property value; pass `Enums.Roles.Display` to always get a string
-- `handle:Set(property, value)` — set a property value (value must be a string)
-- `handle:GetClass()` — returns the object's class name as a string
-- `handle:PropertyCount()` / `handle:PropertyName(i)` / `handle:PropertyInfo(i)` — enumerate properties
-- `handle:IsValid()` — check if a handle is still valid
-- `handle:Copy(src)` — copy src into handle
+DataPool children by class: `Worlds`, `Filters`, `GeneratorTypes`, `PresetPools`, `Groups`, `Sequences`, `Plugins`, `Macros`, `Quickeys`, `MAtricks`, `Configurations`, `Pages`, `Layouts`, `Timecodes`, `Timers`.
 
-### Object API: MAtricks
+`dst:Copy(src)` overwrites the destination name — restore with `dst:Set('NAME', dstName)`.
 
-MAtricks objects live inside `DataPool()` in a child pool of class `'MAtricks'`. To get that pool:
+`MessageBox()` returns a table — the selected command value is in `result.result`, not `result.value`.
 
+## Custom UI
+
+Correct dialog structure: `BaseInput` (outer container) → `TitleBar` with `TitleButton` + `CloseButton` → `DialogFrame` (provides background/border, append all content here). `BaseInput` is always transparent — `DialogFrame` is what draws the background.
+
+Z-order: first appended = bottom, last appended = top. UIObjects always render on top of interactive elements regardless of order.
+
+**CheckBox does not self-toggle.** The `clicked` callback fires before STATE updates. Manually toggle and set STATE:
 ```lua
-local function getMAtricksPool()
-    local pool = DataPool()
-    for i = 1, pool:Count() do
-        local child = pool:Ptr(i)
-        if child:GetClass() == 'MAtricks' then
-            return child
-        end
-    end
+function pluginTable.myCallback(caller)
+    myState = not myState
+    caller:Set('STATE', myState and '1' or '0')
 end
 ```
 
-To read/write a specific MAtricks by name:
+Close dialog with `overlay:ClearUIChildren()`. Handle external dismissal with `dialog:HookDelete(fn)`.
 
-```lua
-local matricks = getMAtricksPool():Find('Half Rig - House Spot')
-matricks:Set('XBLOCK', '3')
-matricks:Get('XBLOCK', Enums.Roles.Display)
-```
+## setup-show.lua
 
-Property names are uppercase versions of the CLI names (e.g. `XBlock` → `'XBLOCK'`, `SpeedFromX` → `'SPEEDFROMX'`). Boolean properties use `'Yes'`/`'No'` strings (e.g. `InvertX` → `'INVERTX'`, value `'Yes'` or `'No'`). Use the snippet below to discover all properties on any object:
+Setup dialog for configuring a stage lighting rig. Inputs are `fixtures/trusses` per type (Spot, Wash, Wash Back, Beam, Blinder, Strobe). On run:
+- Triggers macros for spot colour and wash configuration
+- Updates MAtricks (effects engine) block/group/speed values
+- Updates group grids, shuffle, invert, and combined groups (opt-in per type via "Groups" checkbox)
 
-```lua
-for i = 1, handle:PropertyCount() do
-    Echo(handle:PropertyName(i) .. ' = ' .. tostring(handle:Get(handle:PropertyName(i), Enums.Roles.Display)))
-end
-```
+Fixture IDs: `<type 1 digit><truss 2 digits><fixture 2 digits>` — type 1=Spot, 2=Wash, 3=Beam, 4=Blinder, 5=Strobe. Wash Back borrows ID 3 when no Beams are in the show.
 
-`dst:Copy(src)` works but overwrites the destination name — restore it with `dst:Set('NAME', dstName)` after copying.
-
-### Object API: Custom UI
-
-Plugins can build custom windows on the ScreenOverlay using `BaseInput` as the container. Requires `local pluginTable, pluginHandle = select(3, ...)` at module level for button callbacks. Button signals use `btn.clicked = 'callbackName'` + `btn.plugincomponent = pluginHandle`, with the callback defined as `function pluginTable.callbackName(caller) end`. Read values via `lineEdit.content` and `checkBox.checked`. Use `dialog:HookDelete(function() result = 'cancel' end)` to handle external dismissal. Close with `dialog:Parent():Remove(dialog:Index())`.
-
-### `setup-show.lua`
-
-The main plugin. Presents a setup dialog for configuring a stage lighting rig. Based on user input it:
-
-1. Runs macros for house spot colour configuration (colour mix or colour wheel)
-2. Runs macros for house wash configuration (none, single-truss, or multi-truss)
-3. Sets RGBW colour presets on fixture groups that have RGBW enabled
-4. Configures MAtricks (MA3 effects engine building blocks) for each fixture type using the `fixtureCount/trussCount` format (e.g. `6/3` = 6 fixtures per truss, 3 trusses)
-
-Fixture types: Spot, Wash, Wash Back, Beam, Blinder, Strobe. Strobe uses speed-based MAtricks configuration; all other types use block-based half-rig and Y-axis grouping templates.
-
-### Macro dependencies
-
-The plugin depends on these macros already existing in the showfile:
-- `Create Colours RGBW`
-- `Colour Mix Spots`
-- `Colour Wheel Spots`
-- `No House Wash`
-- `Single-Truss Wash`
-- `Multi-Truss Wash`
-
-It also depends on groups named `House <Type> Linear` (e.g. `House Spot Linear`) and MAtricks named `Half Rig - House <Type>`, `Template Y<n> grp3`, `House <Type> - Grp3 Y-1`, etc.
+Wrap group-modifying commands with `Preview On /NoOops; ClearAll /NoOops; ...; ClearAll /NoOops; Preview Off /NoOops`.
