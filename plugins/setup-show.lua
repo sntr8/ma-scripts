@@ -100,52 +100,74 @@ local function groupExists(name)
 end
 
 local function showSetupDialog()
-    local inputNames  = { 'Spot', 'Wash', 'Wash Back', 'Beam', 'Blinder', 'Strobe' }
-    local rgbwNames   = { 'Spot', 'Wash', 'Wash Back', 'Face' }
-    local washOptions = { 'No change', 'None', 'Single-truss', 'Multi-truss' }
-    local spotOptions = { 'No change', 'Colour Mix', 'Colour Wheel' }
+    local inputNames                 = { 'Spot', 'Wash', 'Wash Back', 'Beam', 'Blinder', 'Strobe' }
+    local rgbwNames                  = { 'Spot', 'Wash', 'Wash Back', 'Face' }
+    local washOptions                = { 'No change', 'No Wash', 'Single truss', 'Multi truss' }
+    local spotOptions                = { 'No change', 'Colour Mix', 'Colour Wheel' }
 
-    local washSelected = 1
-    local spotSelected = 1
-    local dialogResult = nil
+    local washSelected               = 1
+    local spotSelected               = 1
+    local dialogResult               = nil
 
     local overlay = GetFocusDisplay().ScreenOverlay
-    local W, H = 480, 630
+    local W = 505
 
     local dialog = overlay:Append('BaseInput')
-    dialog.W, dialog.H = W, H
-    dialog:Set('FRAMEWIDTH', '2')
+    dialog.W = W
+    dialog.H = 678
+    dialog.Columns = 1
+    dialog.Rows = 2
+    dialog[1][1].SizePolicy = 'Fixed'
+    dialog[1][1].Size = 40
+    dialog[1][2].SizePolicy = 'Stretch'
+    dialog.AutoClose = 'No'
 
-    -- Title label (manual — avoids NormedTitleBar's built-in close behaviour)
-    local titleLabel = dialog:Append('UIObject')
-    titleLabel.Text = 'Show Setup'
-    titleLabel.X, titleLabel.Y = 0, 0
-    titleLabel.W, titleLabel.H = W, 30
+    local titleBar = dialog:Append('TitleBar')
+    titleBar.Columns = 2
+    titleBar.Rows = 1
+    titleBar.Anchors = '0,0'
+    titleBar[2][2].SizePolicy = 'Fixed'
+    titleBar[2][2].Size = 50
+    titleBar.Texture = 'corner2'
+
+    local titleButton = titleBar:Append('TitleButton')
+    titleButton.Text = 'Showfile Setup'
+    titleButton.Texture = 'corner1'
+    titleButton.Anchors = '0,0'
+
+    local closeButton = titleBar:Append('CloseButton')
+    closeButton.Anchors = '1,0'
+    closeButton.Texture = 'corner2'
+
+    local dlgFrame = dialog:Append('DialogFrame')
+    dlgFrame.H = '100%'
+    dlgFrame.W = '100%'
+    dlgFrame.Anchors = '0,1'
 
     -- Fixture count header
-    local fixtureHeader = dialog:Append('UIObject')
-    fixtureHeader.Text = 'Fixture counts  (format: fixtures/trusses  eg. 6/3)'
-    fixtureHeader.X, fixtureHeader.Y = 10, 35
-    fixtureHeader.W, fixtureHeader.H = 440, 20
+    local fixtureHeader              = dlgFrame:Append('UIObject')
+    fixtureHeader.Text               = 'Fixture counts  (format: fixtures/trusses  eg. 6/3)'
+    fixtureHeader.X, fixtureHeader.Y = 10, 5
+    fixtureHeader.W, fixtureHeader.H = 460, 20
 
     -- Fixture inputs
-    local inputFields = {}
-    local updateGroupsStates = {}
-    local updateGroupsBoxes = {}
+    local inputFields                = {}
+    local updateGroupsStates         = {}
+    local updateGroupsBoxes          = {}
     for i, name in ipairs(inputNames) do
-        local y = 60 + (i - 1) * 35
-        local lbl = dialog:Append('UIObject')
+        local y = 30 + (i - 1) * 35
+        local lbl = dlgFrame:Append('UIObject')
         lbl.Text = name
         lbl.X, lbl.Y = 10, y
         lbl.W, lbl.H = 120, 25
-        local edit = dialog:Append('LineEdit')
+        local edit = dlgFrame:Append('LineEdit')
         edit.X, edit.Y = 135, y
         edit.W, edit.H = 195, 25
         inputFields[name] = edit
-        local cb = dialog:Append('CheckBox')
+        local cb = dlgFrame:Append('CheckBox')
         cb.Text = 'Groups'
         cb.X, cb.Y = 335, y
-        cb.W, cb.H = 115, 25
+        cb.W, cb.H = 135, 25
         cb.clicked = 'setupUpdateGroupsChanged'
         cb.plugincomponent = pluginHandle
         updateGroupsBoxes[name] = cb
@@ -154,64 +176,69 @@ local function showSetupDialog()
 
     -- Panel MAtricks inputs
     local panelNames = { 'Strobe FX Panel', 'Strobe Panel' }
-    local panelHeader = dialog:Append('UIObject')
+    local panelHeader = dlgFrame:Append('UIObject')
     panelHeader.Text = 'Define Strobe Panel Sizes  (format: X/Y)'
-    panelHeader.X, panelHeader.Y = 10, 265
-    panelHeader.W, panelHeader.H = 440, 20
+    panelHeader.X, panelHeader.Y = 10, 245
+    panelHeader.W, panelHeader.H = 460, 20
 
     local panelFields = {}
     for i, name in ipairs(panelNames) do
-        local y = 290 + (i - 1) * 35
-        local lbl = dialog:Append('UIObject')
+        local y = 270 + (i - 1) * 35
+        local lbl = dlgFrame:Append('UIObject')
         lbl.Text = name
         lbl.X, lbl.Y = 10, y
         lbl.W, lbl.H = 120, 25
-        local edit = dialog:Append('LineEdit')
+        local edit = dlgFrame:Append('LineEdit')
         edit.X, edit.Y = 135, y
-        edit.W, edit.H = 315, 25
+        edit.W, edit.H = 335, 25
         panelFields[name] = edit
     end
 
     -- Selector buttons
-    local washLbl = dialog:Append('UIObject')
+    local recipeHeader = dlgFrame:Append('UIObject')
+    recipeHeader.Text = 'Recipe Configuration'
+    recipeHeader.X, recipeHeader.Y = 10, 345
+    recipeHeader.W, recipeHeader.H = 460, 20
+
+    local washLbl = dlgFrame:Append('UIObject')
     washLbl.Text = 'House Wash'
-    washLbl.X, washLbl.Y = 10, 375
+    washLbl.X, washLbl.Y = 10, 370
     washLbl.W, washLbl.H = 120, 25
 
-    local washBtn = dialog:Append('Button')
+    local washBtn = dlgFrame:Append('Button')
     washBtn.Text = washOptions[washSelected]
-    washBtn.X, washBtn.Y = 135, 375
-    washBtn.W, washBtn.H = 315, 25
+    washBtn.X, washBtn.Y = 135, 370
+    washBtn.W, washBtn.H = 335, 25
     washBtn.clicked = 'setupWashClicked'
     washBtn.plugincomponent = pluginHandle
 
-    local spotLbl = dialog:Append('UIObject')
+    local spotLbl = dlgFrame:Append('UIObject')
     spotLbl.Text = 'House Spot'
-    spotLbl.X, spotLbl.Y = 10, 410
+    spotLbl.X, spotLbl.Y = 10, 405
     spotLbl.W, spotLbl.H = 120, 25
 
-    local spotBtn = dialog:Append('Button')
+    local spotBtn = dlgFrame:Append('Button')
     spotBtn.Text = spotOptions[spotSelected]
-    spotBtn.X, spotBtn.Y = 135, 410
-    spotBtn.W, spotBtn.H = 315, 25
+    spotBtn.X, spotBtn.Y = 135, 405
+    spotBtn.W, spotBtn.H = 335, 25
     spotBtn.clicked = 'setupSpotClicked'
     spotBtn.plugincomponent = pluginHandle
 
     -- RGBW toggles (2 columns)
-    local rgbwHeader = dialog:Append('UIObject')
+    local rgbwHeader = dlgFrame:Append('UIObject')
     rgbwHeader.Text = 'Update RGBW Colours'
-    rgbwHeader.X, rgbwHeader.Y = 10, 450
-    rgbwHeader.W, rgbwHeader.H = 440, 20
+    rgbwHeader.X, rgbwHeader.Y = 10, 445
+    rgbwHeader.W, rgbwHeader.H = 460, 20
 
     local checkboxes = {}
     local rgbwStates = {}
     for i, name in ipairs(rgbwNames) do
         local col = (i - 1) % 2
         local row = math.floor((i - 1) / 2)
-        local cb = dialog:Append('CheckBox')
+        local cb = dlgFrame:Append('CheckBox')
         cb.Text = name
-        cb.X, cb.Y = 10 + col * 225, 473 + row * 35
-        cb.W, cb.H = 215, 25
+        cb.X, cb.Y = 10 + col * 235, 468 + row * 35
+        cb.W, cb.H = 225, 25
         cb.clicked = 'setupRgbwChanged'
         cb.plugincomponent = pluginHandle
         checkboxes[name] = cb
@@ -219,16 +246,16 @@ local function showSetupDialog()
     end
 
     -- Run / Cancel buttons
-    local cancelBtn = dialog:Append('Button')
+    local cancelBtn = dlgFrame:Append('Button')
     cancelBtn.Text = 'Cancel'
     cancelBtn.X, cancelBtn.Y = 10, 560
     cancelBtn.W, cancelBtn.H = 100, 35
     cancelBtn.clicked = 'setupCancelClicked'
     cancelBtn.plugincomponent = pluginHandle
 
-    local runBtn = dialog:Append('Button')
+    local runBtn = dlgFrame:Append('Button')
     runBtn.Text = 'Run'
-    runBtn.X, runBtn.Y = 350, 560
+    runBtn.X, runBtn.Y = 370, 560
     runBtn.W, runBtn.H = 100, 35
     runBtn.clicked = 'setupRunClicked'
     runBtn.plugincomponent = pluginHandle
@@ -302,7 +329,7 @@ local function showSetupDialog()
     local wasRun = dialogResult == 'run'
 
     -- Always clean up the frame, even if something errors
-    pcall(function() dialog:Parent():Remove(dialog:Index()) end)
+    pcall(function() overlay:ClearUIChildren() end)
     coroutine.yield()
 
     if not wasRun then
@@ -310,12 +337,12 @@ local function showSetupDialog()
     end
 
     return {
-        inputs        = inputs,
-        panels        = panels,
-        states        = states,
-        updateGroups  = updateGroupsStates,
-        washConfig    = washSelected,
-        spotColours   = spotSelected
+        inputs       = inputs,
+        panels       = panels,
+        states       = states,
+        updateGroups = updateGroupsStates,
+        washConfig   = washSelected,
+        spotColours  = spotSelected
     }
 end
 
@@ -363,6 +390,10 @@ local function main()
     end
 
     local typeId = { Spot = 1, Wash = 2, Beam = 3, Blinder = 4, Strobe = 5 }
+    local beamCount = tonumber(string.match(tostring(setup.inputs['Beam'] or ''), "^(%d+)/"))
+    if not beamCount then
+        typeId['Wash Back'] = 3
+    end
 
     for group, value in pairs(setup.inputs) do
         local fixtureCount, trussCount = string.match(tostring(value), "^(%d+)/(%d+)$")
@@ -404,29 +435,46 @@ local function main()
                 if groupExists(shuffleName) then
                     Echo("### Updating shuffle group for House " .. group)
                     CmdIndirectWait('Preview On /NoOops; ClearAll /NoOops; Group ' ..
-                    q('House ' .. group .. ' Linear') .. ' /NoOops; Shuffle /NoOops; Store Group ' .. q(shuffleName) .. ' /o /NoOops; ClearAll /NoOops; Preview Off /NoOops')
+                        q('House ' .. group .. ' Linear') ..
+                        ' /NoOops; Shuffle /NoOops; Store Group ' ..
+                        q(shuffleName) .. ' /o /NoOops; ClearAll /NoOops; Preview Off /NoOops')
                 end
                 local invertName = 'House ' .. group .. ' Invert'
                 if groupExists(invertName) then
                     Echo("### Updating invert group for House " .. group)
                     CmdIndirectWait('Preview On /NoOops; ClearAll /NoOops; Group ' ..
-                    q('House ' .. group) ..
-                    '; Grid "Flip" "X"; Store Group ' ..
-                    q(invertName) .. ' /o /NoOops; ClearAll /NoOops; Preview Off /NoOops')
+                        q('House ' .. group) ..
+                        '; Grid "Flip" "X"; Store Group ' ..
+                        q(invertName) .. ' /o /NoOops; ClearAll /NoOops; Preview Off /NoOops')
                 end
                 local invertYName = 'House ' .. group .. ' Y Invert'
                 if groupExists(invertYName) then
                     Echo("### Updating Y invert group for House " .. group)
                     CmdIndirectWait('Preview On /NoOops; ClearAll /NoOops; Group ' ..
-                    q('House ' .. group) ..
-                    '; Grid "Flip" "Y"; Store Group ' ..
-                    q(invertYName) .. ' /o /NoOops; ClearAll /NoOops; Preview Off /NoOops')
+                        q('House ' .. group) ..
+                        '; Grid "Flip" "Y"; Store Group ' ..
+                        q(invertYName) .. ' /o /NoOops; ClearAll /NoOops; Preview Off /NoOops')
+                end
+                if group == 'Wash' and groupExists('All Wash') then
+                    Echo("### Updating All Wash group")
+                    local washBackValue = tostring(setup.inputs['Wash Back'])
+                    local _, washBackTrussCount = string.match(washBackValue, "^(%d+)/(%d+)$")
+                    washBackTrussCount = tonumber(washBackTrussCount)
+                    local sourceGroup, houseWashRow
+                    if washBackTrussCount then
+                        sourceGroup = 'My Wash Back'
+                        houseWashRow = washBackTrussCount
+                    else
+                        sourceGroup = 'My Wash'
+                        houseWashRow = 1
+                    end
+                    CmdIndirectWait('Preview On /NoOops; ClearAll /NoOops; Group ' .. q(sourceGroup) ..
+                        ' /NoOops; Grid 0/' .. houseWashRow .. ' /NoOops; + Group "House Wash" /NoOops; Store Group "All Wash" /o /NoOops; ClearAll /NoOops; Preview Off /NoOops')
                 end
             end
         else
             Echo("### " .. group .. " count not given")
         end
-
     end
 
     local panelPatterns = {
