@@ -37,6 +37,20 @@ local function getMAtricksPool()
     return matricksPool
 end
 
+local function setMAtricksPattern(pattern, property, value)
+    local pool = getMAtricksPool()
+    if not pool then return end
+    for i = 1, pool:Count() do
+        local item = pool:Ptr(i)
+        if item and item:IsValid() then
+            local name = item:Get('NAME', Enums.Roles.Display)
+            if name and name:find(pattern) then
+                item:Set(property, tostring(value))
+            end
+        end
+    end
+end
+
 local function setMAtricks(name, property, value)
     local matricks = getMAtricksPool():Find(name)
     if not matricks or not matricks:IsValid() then
@@ -87,7 +101,7 @@ end
 
 local function showSetupDialog()
     local inputNames  = { 'Spot', 'Wash', 'Wash Back', 'Beam', 'Blinder', 'Strobe' }
-    local rgbwNames   = { 'Spot RGBW', 'Wash RGBW', 'Wash Back RGBW', 'Face RGBW' }
+    local rgbwNames   = { 'Spot', 'Wash', 'Wash Back', 'Face' }
     local washOptions = { 'No change', 'None', 'Single-truss', 'Multi-truss' }
     local spotOptions = { 'No change', 'Colour Mix', 'Colour Wheel' }
 
@@ -96,7 +110,7 @@ local function showSetupDialog()
     local dialogResult = nil
 
     local overlay = GetFocusDisplay().ScreenOverlay
-    local W, H = 460, 570
+    local W, H = 480, 630
 
     local dialog = overlay:Append('BaseInput')
     dialog.W, dialog.H = W, H
@@ -138,35 +152,55 @@ local function showSetupDialog()
         updateGroupsStates[name] = false
     end
 
+    -- Panel MAtricks inputs
+    local panelNames = { 'Strobe FX Panel', 'Strobe Panel' }
+    local panelHeader = dialog:Append('UIObject')
+    panelHeader.Text = 'Define Strobe Panel Sizes  (format: X/Y)'
+    panelHeader.X, panelHeader.Y = 10, 265
+    panelHeader.W, panelHeader.H = 440, 20
+
+    local panelFields = {}
+    for i, name in ipairs(panelNames) do
+        local y = 290 + (i - 1) * 35
+        local lbl = dialog:Append('UIObject')
+        lbl.Text = name
+        lbl.X, lbl.Y = 10, y
+        lbl.W, lbl.H = 120, 25
+        local edit = dialog:Append('LineEdit')
+        edit.X, edit.Y = 135, y
+        edit.W, edit.H = 315, 25
+        panelFields[name] = edit
+    end
+
     -- Selector buttons
     local washLbl = dialog:Append('UIObject')
     washLbl.Text = 'House Wash'
-    washLbl.X, washLbl.Y = 10, 280
+    washLbl.X, washLbl.Y = 10, 375
     washLbl.W, washLbl.H = 120, 25
 
     local washBtn = dialog:Append('Button')
     washBtn.Text = washOptions[washSelected]
-    washBtn.X, washBtn.Y = 135, 280
+    washBtn.X, washBtn.Y = 135, 375
     washBtn.W, washBtn.H = 315, 25
     washBtn.clicked = 'setupWashClicked'
     washBtn.plugincomponent = pluginHandle
 
     local spotLbl = dialog:Append('UIObject')
     spotLbl.Text = 'House Spot'
-    spotLbl.X, spotLbl.Y = 10, 315
+    spotLbl.X, spotLbl.Y = 10, 410
     spotLbl.W, spotLbl.H = 120, 25
 
     local spotBtn = dialog:Append('Button')
     spotBtn.Text = spotOptions[spotSelected]
-    spotBtn.X, spotBtn.Y = 135, 315
+    spotBtn.X, spotBtn.Y = 135, 410
     spotBtn.W, spotBtn.H = 315, 25
     spotBtn.clicked = 'setupSpotClicked'
     spotBtn.plugincomponent = pluginHandle
 
     -- RGBW toggles (2 columns)
     local rgbwHeader = dialog:Append('UIObject')
-    rgbwHeader.Text = 'RGBW'
-    rgbwHeader.X, rgbwHeader.Y = 10, 355
+    rgbwHeader.Text = 'Update RGBW Colours'
+    rgbwHeader.X, rgbwHeader.Y = 10, 450
     rgbwHeader.W, rgbwHeader.H = 440, 20
 
     local checkboxes = {}
@@ -176,7 +210,7 @@ local function showSetupDialog()
         local row = math.floor((i - 1) / 2)
         local cb = dialog:Append('CheckBox')
         cb.Text = name
-        cb.X, cb.Y = 10 + col * 225, 378 + row * 35
+        cb.X, cb.Y = 10 + col * 225, 473 + row * 35
         cb.W, cb.H = 215, 25
         cb.clicked = 'setupRgbwChanged'
         cb.plugincomponent = pluginHandle
@@ -187,14 +221,14 @@ local function showSetupDialog()
     -- Run / Cancel buttons
     local cancelBtn = dialog:Append('Button')
     cancelBtn.Text = 'Cancel'
-    cancelBtn.X, cancelBtn.Y = 10, 465
+    cancelBtn.X, cancelBtn.Y = 10, 560
     cancelBtn.W, cancelBtn.H = 100, 35
     cancelBtn.clicked = 'setupCancelClicked'
     cancelBtn.plugincomponent = pluginHandle
 
     local runBtn = dialog:Append('Button')
     runBtn.Text = 'Run'
-    runBtn.X, runBtn.Y = 350, 465
+    runBtn.X, runBtn.Y = 350, 560
     runBtn.W, runBtn.H = 100, 35
     runBtn.clicked = 'setupRunClicked'
     runBtn.plugincomponent = pluginHandle
@@ -258,6 +292,11 @@ local function showSetupDialog()
         inputs[name] = inputFields[name].content
     end
 
+    local panels = {}
+    for _, name in ipairs(panelNames) do
+        panels[name] = panelFields[name].content
+    end
+
     local states = rgbwStates
 
     local wasRun = dialogResult == 'run'
@@ -272,6 +311,7 @@ local function showSetupDialog()
 
     return {
         inputs        = inputs,
+        panels        = panels,
         states        = states,
         updateGroups  = updateGroupsStates,
         washConfig    = washSelected,
@@ -387,6 +427,23 @@ local function main()
             Echo("### " .. group .. " count not given")
         end
 
+    end
+
+    local panelPatterns = {
+        ['Strobe Panel']    = '^Strobe Main',
+        ['Strobe FX Panel'] = '^FX Main',
+    }
+
+    for name, value in pairs(setup.panels) do
+        local x, y = string.match(tostring(value), "^(%d+)/(%d+)$")
+        x = tonumber(x)
+        y = tonumber(y)
+        if x and y then
+            local pattern = panelPatterns[name]
+            Echo("### Updating MAtricks " .. name .. " X=" .. x .. " Y=" .. y)
+            setMAtricksPattern(pattern, 'XBLOCK', x)
+            setMAtricksPattern(pattern, 'YBLOCK', y)
+        end
     end
 end
 
